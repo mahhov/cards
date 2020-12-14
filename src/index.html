@@ -1,0 +1,15 @@
+<script>
+	let module = {};
+	let getXElementName = () => document.currentScript.src
+		.match(/\/([^/]+)\.js$/)[1]
+		.replace(/[A-Z]/, (v, i) => `${i ? '-' : ''}${v.toLowerCase()}`);
+</script>
+<script src="../node_modules/xx-element/src/XElement.js"></script>
+<script src="xElements/xCard.js"></script>
+<script src="xElements/xStack.js"></script>
+<script src="xElements/xPool.js"></script>
+<script src="xElements/xPlayer.js"></script>
+<script src="xElements/xGame.js"></script>
+<script src="cardData.js"></script>
+
+<x-game></x-game>
