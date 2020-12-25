@@ -117,7 +117,7 @@ class XPlayer extends XElement {
 	}
 
 	get typeAsCondition() {
-		return conditions.source.player;
+		return conditions.entity.player;
 	}
 }
 

@@ -15,7 +15,9 @@ class XCard extends XElement {
 			life: {type: XElement.PropertyTypes.number},
 			maxLife: {type: XElement.PropertyTypes.number},
 			cost: {type: XElement.PropertyTypes.number},
-			// abilities as object
+			// abilities as array
+			// buffedTargets as array
+			// buffedBy as array
 			selected: {type: XElement.PropertyTypes.boolean},
 		};
 	}
@@ -85,6 +87,8 @@ class XCard extends XElement {
 		card.maxLife = life;
 		card.cost = cost;
 		card.abilities = abilities;
+		card.buffedTargets = [];
+		card.buffedBy = [];
 		return card;
 	}
 
@@ -134,12 +138,16 @@ class XCard extends XElement {
 		this.abilities.forEach(ability => ability.triggered = 0);
 	}
 
+	get dead() {
+		return !this.life && this.type === cardTypes.creature;
+	}
+
 	get clone() {
 		return XCard.create(this.name, this.type, this.description, this.maxAttack, this.maxLife, this.cost, this.abilities.map(ability => ability.clone));
 	}
 
 	get typeAsCondition() {
-		return conditions.source[this.type];
+		return conditions.entity[this.type];
 	}
 }
 

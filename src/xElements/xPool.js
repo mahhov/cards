@@ -43,7 +43,7 @@ class XPool extends XElement {
 
 	removeDeadStacks() {
 		this.stacks = this.stacks.filter(stack => {
-			if (stack.card.life || stack.card.type !== cardTypes.creature)
+			if (!stack.card.dead)
 				return true;
 			stack.remove();
 		});
@@ -51,6 +51,10 @@ class XPool extends XElement {
 
 	findCardIndex(card) {
 		return this.stacks.findIndex(stack => stack.card === card);
+	}
+
+	get cards() {
+		return this.stacks.map(stack => stack.card);
 	}
 
 	get selectedStackIndex() {

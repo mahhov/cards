@@ -16,40 +16,95 @@ class Event {
 }
 
 class TurnStartEvent extends Event {
-	constructor() {
+	constructor(turnPlayer, opponentPlayer) {
 		super();
+		this.turnPlayer = turnPlayer;
+		this.opponentPlayer = opponentPlayer;
+		this.resource = 0;
 	}
 
-	apply() {
+	apply(game) {
+		game.triggerAbilities(this.turnPlayer, this.opponentPlayer, conditions.entity.player, conditions.event.turnStart, this);
+		game.resources += this.resource;
+		game.notifyPlayersOfChange();
+		return [];
+	}
+}
+
+class PreSummonEvent extends Event {
+	constructor(player, otherPlayer, target) {
+		super();
+		this.player = player;
+		this.otherPlayer = otherPlayer;
+		this.target = target;
+		this.cost = target.cost;
+	}
+
+	apply(game) {
+		game.triggerAbilities(this.player, this.otherPlayer, this.target.typeAsCondition, conditions.event.preSummon, this);
+		return game.resources >= this.cost ?
+			[new SummonEvent(this.player, this.otherPlayer, this.target, this.cost)] :
+			[];
 	}
 }
 
 class SummonEvent extends Event {
-	constructor() {
+	constructor(player, otherPlayer, target, cost = target.cost) {
 		super();
+		this.player = player;
+		this.otherPlayer = otherPlayer;
+		this.target = target;
+		this.cost = cost;
 	}
 
+	apply(game) {
+		game.triggerAbilities(this.player, this.otherPlayer, this.target.typeAsCondition, conditions.event.summon, this);
+		game.resources -= this.cost;
+		if (this.target.type === cardTypes.resource) {
+			game.phase = phases.playResourcePlayed;
+			game.resources++;
+		}
+		game.moveCard(this.player.hand, this.target, this.player.active);
+		game.notifyPlayersOfChange();
+		return [];
+	}
 }
 
 class DrawEvent extends Event {
 	constructor() {
 		super();
 	}
-
 }
 
 class EndPlayEvent extends Event {
-	constructor() {
+	constructor(turnPlayer, opponentPlayer) {
 		super();
+		this.turnPlayer = turnPlayer;
+		this.opponentPlayer = opponentPlayer;
 	}
 
+	apply(game) {
+		game.triggerAbilities(this.turnPlayer, this.opponentPlayer, conditions.entity.player, conditions.event.endPlay, this);
+		return [];
+	}
 }
 
 class EndDrawEvent extends Event {
-	constructor() {
+	constructor(turnPlayer, opponentPlayer) {
 		super();
+		this.turnPlayer = turnPlayer;
+		this.opponentPlayer = opponentPlayer;
 	}
 
+	apply(game) {
+		game.triggerAbilities(this.turnPlayer, this.opponentPlayer, conditions.entity.player, conditions.event.endPlay, this);
+		game.turn = 1 - game.turn;
+		game.phase = phases.play;
+		game.resources = game.player.active.stacks
+			.filter(stack => stack.card.type === cardTypes.resource)
+			.reduce((a, stack) => a + stack.count, 0) + 100;
+		return [new TurnStartEvent(game.player, game.otherPlayer)];
+	}
 }
 
 class AttackTargetEvent extends Event {
@@ -87,58 +142,81 @@ class AttackDamageEvent extends Event {
 }
 
 class PreDeathEvent extends Event {
-	constructor(sourcePlayer, targetPlayer, target) {
+	constructor(otherPlayer, ownerPlayer, target) {
 		super();
-		this.sourcePlayer = sourcePlayer;
-		this.targetPlayer = targetPlayer;
+		this.otherPlayer = otherPlayer;
+		this.ownerPlayer = ownerPlayer;
 		this.target = target;
 		this.die = true;
 	}
 
 	apply(game) {
-		game.triggerAbilities(this.targetPlayer, this.sourcePlayer, this.target.typeAsCondition, conditions.event.preDeath, this);
-		return this.die ? [new DeathEvent(this.sourcePlayer, this.targetPlayer, this.target)] : [];
+		game.triggerAbilities(this.ownerPlayer, this.otherPlayer, this.target.typeAsCondition, conditions.event.preDeath, this);
+		return this.die ? [new DeathEvent(this.otherPlayer, this.ownerPlayer, this.target)] : [];
 	}
 }
 
 class DeathEvent extends Event {
-	constructor(sourcePlayer, targetPlayer, target) {
+	constructor(otherPlayer, ownerPlayer, target) {
 		super();
-		this.sourcePlayer = sourcePlayer;
-		this.targetPlayer = targetPlayer;
+		this.otherPlayer = otherPlayer;
+		this.ownerPlayer = ownerPlayer;
 		this.target = target;
 	}
 
 	apply(game) {
-		game.triggerAbilities(this.targetPlayer, this.sourcePlayer, this.target.typeAsCondition, conditions.event.death, this);
+		game.triggerAbilities(this.ownerPlayer, this.otherPlayer, this.target.typeAsCondition, conditions.event.death, this);
 		// todo handle player death
+		return [new SelfDeathEvent(this.otherPlayer, this.ownerPlayer, this.target)];
+	}
+}
+
+class SelfDeathEvent extends Event {
+	constructor(otherPlayer, ownerPlayer, target) {
+		super();
+		this.otherPlayer = otherPlayer;
+		this.ownerPlayer = ownerPlayer;
+		this.target = target;
+	}
+
+	apply(game) {
+		game.triggerAbilities(this.ownerPlayer, this.otherPlayer, this.target.typeAsCondition, conditions.event.selfDeath, this);
 		return [];
 	}
 }
 
-class ActiveEvent extends Event {
-	constructor() {
-		super();
-	}
-
-}
-
 class BuffEvent extends Event {
-	constructor(targetPlayer, nonTargetPlayer, target, attack, life) {
+	constructor(targetPlayer, nonTargetPlayer, target, attack, life, capped = false, sourceCard = null) {
 		super();
 		this.targetPlayer = targetPlayer;
 		this.nonTargetPlayer = nonTargetPlayer;
 		this.target = target;
 		this.attack = attack;
 		this.life = life;
+		this.capped = true;
+		this.sourceCard = sourceCard;
 	}
 
 	apply(game) {
+		if (this.target.buffedBy?.includes(this.sourceCard) || this.sourceCard?.buffedTargets?.includes(this.target))
+			return [];
+
 		game.triggerAbilities(this.targetPlayer, this.nonTargetPlayer, this.target.typeAsCondition, conditions.event.buff, this);
-		this.target.attack += this.attack;
-		this.target.maxAttack += this.attack;
-		this.target.life += this.life;
-		this.target.maxLife += this.life;
+
+		if (this.capped && this.attack > 0)
+			this.target.attack = Math.max(this.target.attack, Math.min(this.target.attack + this.attack, this.target.maxAttack));
+		else
+			this.target.attack += this.attack;
+
+		if (this.capped && this.life > 0)
+			this.target.life = Math.max(this.target.life, Math.min(this.target.life + this.life, this.target.maxLife));
+		else
+			this.target.life += this.life;
+
+		if (this.sourceCard) {
+			this.target.buffedBy.push(this.sourceCard);
+			this.sourceCard.buffedTargets.push(this.target);
+		}
 		return [];
 	}
 }
@@ -189,9 +267,9 @@ class XGame extends XElement {
 		this.phase = phases.play;
 		this.resources = 0;
 		this.draws = 0;
-		this.moveCard(this.centerPool, 0, this.players[this.turn].hand);
-		this.moveCard(this.centerPool, 0, this.players[1 - this.turn].hand);
-		this.moveCard(this.centerPool, 0, this.players[1 - this.turn].hand);
+		this.moveCardByIndex(this.centerPool, 0, this.player.hand);
+		this.moveCardByIndex(this.centerPool, 0, this.otherPlayer.hand);
+		this.moveCardByIndex(this.centerPool, 0, this.otherPlayer.hand);
 
 		let pools = [
 			this.centerPool,
@@ -202,7 +280,7 @@ class XGame extends XElement {
 		pools.forEach(pool =>
 			pool.addEventListener('select', ({detail: card}) => {
 				let wasSelected = card.selected;
-				pools.forEach(pool => pool.stacks.forEach(stack => stack.card.selected = false));
+				pools.forEach(pool => pool.cards.forEach(card => card.selected = false));
 				card.selected = !wasSelected;
 			}));
 		this.players.forEach((player, i) => {
@@ -215,13 +293,13 @@ class XGame extends XElement {
 		});
 		this.notifyPlayersOfChange();
 
+		this.player.hand.addStack(cards.rare[3], 3);
+		this.player.hand.addStack(cards.rare[2], 3);
+
 		// todo available selection indicator
 	}
 
-	connectedCallback() {
-	}
-
-	moveCard(fromPool, fromIndex, toPool) {
+	moveCardByIndex(fromPool, fromIndex, toPool) {
 		let stack = fromPool.stacks[fromIndex];
 		let resourceStack = toPool.stacks.find(stack => stack.card.type === cardTypes.resource);
 		if (stack.card.type === cardTypes.resource && resourceStack)
@@ -234,10 +312,16 @@ class XGame extends XElement {
 		}
 	}
 
+	moveCard(fromPool, fromCard, toPool) {
+		let fromIndex = fromPool.stacks.findIndex(stack => stack.card === fromCard);
+		this.moveCardByIndex(fromPool, fromIndex, toPool);
+	}
+
+	// todo use event
 	drawCard(playerIndex, poolCardIndex) {
 		if (this.turn === playerIndex && this.phase === phases.draw && this.draws && this.centerPool.stacks[poolCardIndex]?.count) {
 			this.draws--;
-			this.moveCard(this.centerPool, poolCardIndex, this.players[playerIndex].hand);
+			this.moveCardByIndex(this.centerPool, poolCardIndex, this.players[playerIndex].hand);
 			this.notifyPlayersOfChange();
 		}
 	}
@@ -253,26 +337,17 @@ class XGame extends XElement {
 		// can play 1 resource per turn
 		if (stack.card.type === cardTypes.resource && this.phase === phases.playResourcePlayed)
 			return;
-		// must have enough resources
-		if (stack.card.cost > this.resources)
-			return false;
-		// play card
-		this.resources -= stack.card.cost;
-		if (stack.card.type === cardTypes.resource) {
-			this.phase = phases.playResourcePlayed;
-			this.resources++;
-		}
-		this.moveCard(this.players[playerIndex].hand, handCardIndex, this.players[playerIndex].active);
-		this.notifyPlayersOfChange();
+		this.doEvent(new PreSummonEvent(this.player, this.otherPlayer, stack.card));
 	}
 
 	endPlayPhase(playerIndex) {
-		this.players.forEach(player => player.active.stacks.forEach(stack => stack.card.resetAbilities()));
+		this.players.forEach(player => player.active.cards.forEach(card => card.resetAbilities()));
 
-		if (this.turn === playerIndex && (this.phase === phases.play || this.phase === phases.playResourcePlayed)) {
-			this.players[this.turn].active.stacks.forEach(stack =>
-				this.doEvent(new AttackTargetEvent(stack.card, this.players[this.turn], this.players[1 - this.turn])));
+		if (this.turn === playerIndex && this.phase !== phases.draw) {
+			this.player.active.cards.forEach(card =>
+				this.doEvent(new AttackTargetEvent(card, this.player, this.otherPlayer)));
 			this.players.forEach(player => player.active.removeDeadStacks());
+			this.doEvent(new EndPlayEvent(this.player, this.otherPlayer));
 			this.phase = phases.draw;
 			this.draws = 2;
 			this.notifyPlayersOfChange();
@@ -280,14 +355,8 @@ class XGame extends XElement {
 	}
 
 	endDrawPhase(playerIndex) {
-		if (this.turn === playerIndex && this.phase === phases.draw) {
-			this.turn = 1 - this.turn;
-			this.phase = phases.play;
-			this.resources = this.players[this.turn].active.stacks
-				.filter(stack => stack.card.type === cardTypes.resource)
-				.reduce((a, stack) => a + stack.count, 0) + 100;
-			this.notifyPlayersOfChange();
-		}
+		if (this.turn === playerIndex && this.phase === phases.draw)
+			this.doEvent(new EndDrawEvent(this.player, this.otherPlayer));
 	}
 
 	notifyPlayersOfChange() {
@@ -303,17 +372,28 @@ class XGame extends XElement {
 		event.apply(this).forEach(event => this.doEvent(event));
 	}
 
-	triggerAbilities(selfPlayer, opponentPlayer, sourceCondition, eventCondition, eventData) {
+	triggerAbilities(selfPlayer, opponentPlayer, entityCondition, eventCondition, eventData) {
 		[selfPlayer, opponentPlayer].forEach((player, isOpponentPlayer) =>
-			player.active.stacks.forEach(stack =>
-				stack.card.abilities.forEach(ability =>
-					ability.tryTrigger(
-						isOpponentPlayer ? conditions.player.opponent : conditions.player.self,
-						sourceCondition,
-						eventCondition,
-						eventData,
-						stack.card)
-						?.forEach(event => this.doEvent(event)))));
+			player.active.stacks.map(stack => stack.card)
+				.filter(card => !card.dead ||
+					eventCondition === conditions.event.selfDeath && card === eventData.target)
+				.forEach(card =>
+					card.abilities.forEach(ability =>
+						ability.tryTrigger(
+							isOpponentPlayer ? conditions.player.opponent : conditions.player.self,
+							entityCondition,
+							eventCondition,
+							eventData,
+							card)
+							?.forEach(event => this.doEvent(event)))));
+	}
+
+	get player() {
+		return this.players[this.turn];
+	}
+
+	get otherPlayer() {
+		return this.players[1 - this.turn];
 	}
 }
 
