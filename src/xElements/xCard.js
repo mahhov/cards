@@ -139,7 +139,7 @@ class XCard extends XElement {
 	}
 
 	get dead() {
-		return !this.life && this.type === cardTypes.creature;
+		return this.life <= 0 && this.type === cardTypes.creature;
 	}
 
 	get clone() {

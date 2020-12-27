@@ -100,14 +100,21 @@ class Ability {
 			})]);
 	}
 
-	static buffOnDamage(playerCondition, entityCondition, attack, life) {
+	static damageAllHostiles(amount) {
 		return new Ability(
-			[new Condition([playerCondition], [conditions.entity.creature], [conditions.event.attackDamage])],
+			[new Condition([conditions.player.self], [conditions.entity.player], [conditions.event.endPlay])],
 			[new Effect((event, ownerCard, ability) => {
-				if (!ability.triggered && event.sourceCard === ownerCard && event.target.typeAsCondition === entityCondition) {
-					ability.triggered++;
+				return event.opponentPlayer.active.cards.map(target =>
+					new AttackDamageEvent(ownerCard, event.turnPlayer, event.opponentPlayer, target, amount));
+			})]);
+	}
+
+	static buffOnDamage(entityCondition, attack, life) {
+		return new Ability(
+			[new Condition([conditions.player.opponent], [conditions.entity.creature], [conditions.event.attackDamage])],
+			[new Effect((event, ownerCard, ability) => {
+				if (event.sourceCard === ownerCard && event.target.typeAsCondition === entityCondition)
 					return new BuffEvent(event.targetPlayer, event.sourcePlayer, ownerCard, attack, life);
-				}
 			})]);
 	}
 
@@ -128,7 +135,7 @@ class Ability {
 				if (event.target === ownerCard)
 					// todo iterate ownerPlayer.cards and remove card.buffedTargets field
 					return event.target.buffedTargets.map(buffed =>
-						new BuffEvent(event.ownerPlayer, event.otherPlayer, buffed, attack, life,false, null));
+						new BuffEvent(event.ownerPlayer, event.otherPlayer, buffed, attack, life, false, null));
 			})]);
 	}
 
@@ -175,7 +182,7 @@ let cards = {
 		XCard.create('wall', cardTypes.creature, '-1 all incoming damage, taunt', 0, 4, 3,
 			[Ability.taunt(), Ability.decreaseIncomingDamage(1)]),
 		XCard.create('vampire', cardTypes.creature, '+1/+0 damage after dealing damage to the player', 2, 4, 4,
-			[Ability.buffOnDamage(conditions.player.opponent, conditions.entity.player, 1, 0)]),
+			[Ability.buffOnDamage(conditions.entity.player, 1, 0)]),
 		XCard.create('fireball', cardTypes.spell, '2 damage to any creature or player', 0, 0, 3),
 		XCard.create('reinforcements', cardTypes.spell, 'draw 2 cards', 0, 0, 3),
 		XCard.create('sword', cardTypes.spell, '1 damage to one attacking creature per turn', 0, 0, 4),
@@ -192,6 +199,7 @@ let cards = {
 			[Ability.summonCost(conditions.player.self, conditions.entity.creature, -1)]),
 	],
 	legendary: [
-		XCard.create('dragon', cardTypes.creature, '1 damage to all hostile creatures on attack', 0, 5, 8),
+		XCard.create('dragon', cardTypes.creature, '1 damage to all hostile creatures on attack', 0, 5, 8,
+			[Ability.damageAllHostiles(1)]),
 	],
 };

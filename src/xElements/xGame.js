@@ -97,7 +97,7 @@ class EndDrawEvent extends Event {
 	}
 
 	apply(game) {
-		game.triggerAbilities(this.turnPlayer, this.opponentPlayer, conditions.entity.player, conditions.event.endPlay, this);
+		game.triggerAbilities(this.turnPlayer, this.opponentPlayer, conditions.entity.player, conditions.event.endDraw, this);
 		game.turn = 1 - game.turn;
 		game.phase = phases.play;
 		game.resources = game.player.active.stacks
@@ -293,8 +293,8 @@ class XGame extends XElement {
 		});
 		this.notifyPlayersOfChange();
 
-		this.player.hand.addStack(cards.rare[3], 3);
-		this.player.hand.addStack(cards.rare[2], 3);
+		this.player.hand.addStack(cards.legendary[0], 3);
+		this.otherPlayer.hand.addStack(cards.common[1], 3);
 
 		// todo available selection indicator
 	}
@@ -341,13 +341,13 @@ class XGame extends XElement {
 	}
 
 	endPlayPhase(playerIndex) {
-		this.players.forEach(player => player.active.cards.forEach(card => card.resetAbilities()));
-
 		if (this.turn === playerIndex && this.phase !== phases.draw) {
+			this.players.forEach(player => player.active.cards.forEach(card => card.resetAbilities()));
 			this.player.active.cards.forEach(card =>
 				this.doEvent(new AttackTargetEvent(card, this.player, this.otherPlayer)));
-			this.players.forEach(player => player.active.removeDeadStacks());
 			this.doEvent(new EndPlayEvent(this.player, this.otherPlayer));
+			this.players.forEach(player => player.active.removeDeadStacks());
+
 			this.phase = phases.draw;
 			this.draws = 2;
 			this.notifyPlayersOfChange();
