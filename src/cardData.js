@@ -155,50 +155,52 @@ class Ability {
 			})]);
 	}
 
-	static healOnTurnEnd(entityConditions, amount) {
+	static healOnTurnEnd(entityConditions, healSelf, amount) {
 		return new Ability(
 			[new Condition([conditions.player.self], [], [conditions.event.endPlay])],
 			[new Effect((event, ownerCard, ability) => {
 				event.turnPlayer.active.cards
-					.filter(card => card !== ownerCard && Condition.matches(entityConditions, card.typeAsCondition))
+					.filter(card => (card !== ownerCard || healSelf) && Condition.matches(entityConditions, card.typeAsCondition))
 					.map(card => new BuffEvent(event.turnPlayer, event.otherPlayer, card, 0, amount, true));
 			})]);
 	}
 }
 
 let cards = {
-	resource: [
+	resource: [ // 1
 		XCard.create('resource', cardTypes.resource, '', 0, 0, 0),
 	],
-	common: [
+	common: [ // 3
 		XCard.create('goblin', cardTypes.creature, '', 1, 1, 1),
 		XCard.create('giant', cardTypes.creature, '', 1, 3, 2),
 		XCard.create('wild beast', cardTypes.creature, '', 2, 1, 2),
-		XCard.create('empower', cardTypes.spell, '+1/+1 to target creature', 0, 0, 3),
+		XCard.create('golem', cardTypes.creature, '+1/+0 when a friendly golem is played', 0, 4, 4,
+			[/*todo*/]),
 		XCard.create('witch', cardTypes.creature, '1 damage the first hostile creature attacking each turn', 2, 1, 3,
 			[Ability.returnDamage(1, 1)]),
 	],
-	uncommon: [
+	uncommon: [ // 3
 		XCard.create('wall', cardTypes.creature, '-1 all incoming damage, taunt', 0, 4, 3,
 			[Ability.taunt(), Ability.decreaseIncomingDamage(1)]),
 		XCard.create('vampire', cardTypes.creature, '+1/+0 damage after dealing damage to the player', 2, 4, 4,
 			[Ability.buffOnDamage(conditions.entity.player, 1, 0)]),
-		XCard.create('fireball', cardTypes.spell, '2 damage to any creature or player', 0, 0, 3),
-		XCard.create('reinforcements', cardTypes.spell, 'draw 2 cards', 0, 0, 3),
-		XCard.create('sword', cardTypes.spell, '1 damage to one attacking creature per turn', 0, 0, 4),
+		XCard.create('giant spider', cardTypes.creature, 'Spawn a 1/1 spider at turn end', 2, 2, 4,
+			[/*todo*/]),
+		// XCard.create('reinforcements', cardTypes.spell, 'draw 2 cards', 0, 0, 3),
+		// XCard.create('leech', cardTypes.spell, 'heal +0/+2 to player, 2 damage to opponent player', 0, 0, 3),
 	],
-	rare: [
+	rare: [ // 2
 		XCard.create('supplies', cardTypes.creature, '+1 resource', 0, 2, 3,
 			[Ability.resource(1)]),
 		XCard.create('general', cardTypes.creature, '+1/+1 boost to all friendly creatures while active', 3, 1, 6, [
 			Ability.buffWhileActive(conditions.player.self, [conditions.entity.creature], 1, 1),
 			Ability.buffOnDeath(conditions.entity.creature, -1, -1)]),
 		XCard.create('priest', cardTypes.creature, 'heal +0/+1 to all other friendly creatures and player at turn end', 1, 3, 6,
-			[Ability.healOnTurnEnd([conditions.entity.player, conditions.entity.creature], 1)]),
+			[Ability.healOnTurnEnd([conditions.entity.player, false, conditions.entity.creature], 1)]),
 		XCard.create('summoner', cardTypes.creature, 'creatures cost 1 less resource to cast', 1, 2, 6,
 			[Ability.summonCost(conditions.player.self, conditions.entity.creature, -1)]),
 	],
-	legendary: [
+	legendary: [ // 1
 		XCard.create('dragon', cardTypes.creature, '1 damage to all hostile creatures on attack', 0, 5, 8,
 			[Ability.damageAllHostiles(1)]),
 	],
